@@ -26,7 +26,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "API 设置"
+                text: "网易云音乐 API 设置"
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -39,42 +39,22 @@ ScrollView {
                 columnSpacing: Theme.spacingLg
 
                 Text {
-                    text: "搜索 API"
+                    text: "API 地址"
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
                     Layout.preferredWidth: 120
                 }
                 TextField {
-                    id: musicSearchUrlField
+                    id: musicWyApiUrlField
                     Layout.fillWidth: true
-                    text: settingsModel ? settingsModel.musicSearchUrl : ""
-                    onEditingFinished: if (settingsModel) settingsModel.musicSearchUrl = text
-                    placeholderText: "留空使用默认酷我搜索 API"
+                    text: settingsModel ? settingsModel.musicWyApiUrl : ""
+                    onEditingFinished: if (settingsModel) settingsModel.musicWyApiUrl = text
+                    placeholderText: "留空使用默认网易云音乐 API"
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
                         color: Theme.backgroundSecondary
-                        border.color: musicSearchUrlField.activeFocus ? Theme.primary : "transparent"
-                    }
-                }
-
-                Text {
-                    text: "直链 API"
-                    font.pixelSize: Theme.fontSizeSm
-                    color: Theme.textSecondary
-                    Layout.preferredWidth: 120
-                }
-                TextField {
-                    id: musicUrlApiField
-                    Layout.fillWidth: true
-                    text: settingsModel ? settingsModel.musicUrlApi : ""
-                    onEditingFinished: if (settingsModel) settingsModel.musicUrlApi = text
-                    placeholderText: "留空使用默认 lx-music-api"
-                    font.pixelSize: Theme.fontSizeSm
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: Theme.backgroundSecondary
-                        border.color: musicUrlApiField.activeFocus ? Theme.primary : "transparent"
+                        border.color: musicWyApiUrlField.activeFocus ? Theme.primary : "transparent"
                     }
                 }
 
@@ -85,73 +65,26 @@ ScrollView {
                     Layout.preferredWidth: 120
                 }
                 TextField {
-                    id: musicUrlApiKeyField
+                    id: musicWyApiKeyField
                     Layout.fillWidth: true
-                    text: settingsModel ? settingsModel.musicUrlApiKey : ""
-                    onEditingFinished: if (settingsModel) settingsModel.musicUrlApiKey = text
-                    placeholderText: "留空使用默认 Key"
+                    text: settingsModel ? settingsModel.musicWyApiKey : ""
+                    onEditingFinished: if (settingsModel) settingsModel.musicWyApiKey = text
+                    placeholderText: "输入网易云音乐 API Key"
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
                         color: Theme.backgroundSecondary
-                        border.color: musicUrlApiKeyField.activeFocus ? Theme.primary : "transparent"
+                        border.color: musicWyApiKeyField.activeFocus ? Theme.primary : "transparent"
                     }
                 }
             }
 
             Text {
-                text: "搜索 API 使用酷我官方接口，直链 API 用于获取播放地址（需配合 API Key）"
+                text: "API Key 也可通过环境变量 WYMusic_API_KEY 设置（优先级高于配置文件）"
                 font.pixelSize: Theme.fontSizeXs
                 color: Theme.textTertiary
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: Theme.divider
-        }
-
-        // 播放偏好
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacingMd
-
-            Text {
-                text: "播放偏好"
-                font.pixelSize: Theme.fontSizeMd
-                font.weight: Font.Medium
-                color: Theme.textSecondary
-            }
-
-            GridLayout {
-                Layout.fillWidth: true
-                columns: 2
-                rowSpacing: Theme.spacingMd
-                columnSpacing: Theme.spacingLg
-
-                Text {
-                    text: "默认音质"
-                    font.pixelSize: Theme.fontSizeSm
-                    color: Theme.textSecondary
-                    Layout.preferredWidth: 120
-                }
-                XComboBox {
-                    id: musicQualityCombo
-                    Layout.preferredWidth: 150
-                    model: ["128k", "320k"]
-                    currentIndex: {
-                        var q = settingsModel ? settingsModel.musicDefaultQuality : "320k"
-                        var idx = ["128k", "320k"].indexOf(q)
-                        return idx >= 0 ? idx : 1
-                    }
-                    onActivated: function(index) {
-                        if (settingsModel) settingsModel.musicDefaultQuality = model[index]
-                    }
-                    font.pixelSize: Theme.fontSizeSm
-                }
             }
         }
 

@@ -4,12 +4,13 @@
 """
 
 import asyncio
+import os
+import re
 import shutil
 import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import quote
 
 import numpy as np
 import requests
@@ -134,35 +135,24 @@ class MusicPlayer:
 
         logger.info(
             f"音乐播放器初始化完成 (FFmpeg + AudioCodec 模式, "
-            f"搜索: {self.config['SEARCH_URL']}, 直链: {self.config['URL_API']})"
-        )
-        logger.info(
-            f"默认平台: {self.config['DEFAULT_SOURCE']}, "
-            f"音质: {self.config['DEFAULT_BR']}"
+            f"网易云音乐 API: {self.config['WYMUSIC_API_URL']})"
         )
 
     @staticmethod
     def _load_config() -> dict:
-        """从 ConfigManager 读取音乐配置，未配置时使用默认值."""
+        """从环境变量和 ConfigManager 读取音乐配置，未配置时使用默认值."""
+        import os
         from src.utils.config_manager import ConfigManager
 
         cm = ConfigManager.get_instance()
 
         return {
-            "SEARCH_URL": cm.get_config(
-                "MUSIC.SEARCH_URL", "http://search.kuwo.cn/r.s"
-            ),
-            "URL_API": cm.get_config(
-                "MUSIC.URL_API", "https://lxmusicapi.onrender.com"
-            ),
-            "URL_API_KEY": cm.get_config("MUSIC.URL_API_KEY", "share-v3"),
-            "LYRICS_URL": cm.get_config(
-                "MUSIC.LYRICS_URL",
-                "http://m.kuwo.cn/newh5/singles/songinfoandlrc",
-            ),
-            "DEFAULT_SOURCE": cm.get_config("MUSIC.DEFAULT_PLATFORM", "kw"),
-            "DEFAULT_BR": cm.get_config("MUSIC.DEFAULT_QUALITY", "320k"),
-            "SEARCH_LIMIT": 20,
+            # 环境变量优先级高于配置文件，但用 or 防止空字符串覆盖有效值
+            "WYMUSIC_API_URL": os.environ.get("WYMusic_API_URL")
+                or cm.get_config("MUSIC.WYMUSIC_API_URL", "https://api.yaohud.cn/api/music/wy"),
+            "WYMUSIC_API_KEY": os.environ.get("WYMusic_API_KEY")
+                or cm.get_config("MUSIC.WYMUSIC_API_KEY", ""),
+            "SEARCH_LIMIT": 2,
             "HEADERS": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "application/json, text/plain, */*",
@@ -678,36 +668,35 @@ class MusicPlayer:
     async def _search_song(
         self, song_name: str, source: str | None = None
     ) -> tuple[str, str]:
-        """搜索歌曲获取 ID 和播放 URL.
+        """通过网易云音乐 API 搜索歌曲获取 ID 和播放 URL.
 
         Args:
             song_name: 歌曲名称
-            source: 音乐平台，默认使用配置中的平台
+            source: 未使用（保留兼容）
 
         Returns:
             (song_id, play_url) 元组
         """
         try:
-            keyword_encoded = quote(song_name)
+            api_url = self.config["WYMUSIC_API_URL"]
+            api_key = self.config["WYMUSIC_API_KEY"]
             limit = self.config["SEARCH_LIMIT"]
 
-            search_url = (
-                f"{self.config['SEARCH_URL']}"
-                f"?client=kt&all={keyword_encoded}&pn=0&rn={limit}"
-                f"&uid=794762570&ver=kwplayer_ar_9.2.2.1&vipver=1"
-                f"&show_copyright_off=1&newver=1&ft=music&cluster=0"
-                f"&strategy=2012&encoding=utf8&rformat=json&vermerge=1"
-                f"&mobi=1&issubtitle=1"
-            )
+            params = {
+                "key": api_key,
+                "msg": song_name.strip(),
+                "n": str(limit),
+            }
 
-            logger.info(f"搜索歌曲: {song_name}")
+            logger.info(f"网易云音乐搜索: {song_name}")
 
             response = None
             for attempt in range(3):
                 try:
                     response = await asyncio.to_thread(
                         requests.get,
-                        search_url,
+                        api_url,
+                        params=params,
                         headers=self.config["HEADERS"],
                         timeout=10,
                     )
@@ -721,47 +710,41 @@ class MusicPlayer:
                     return "", ""
 
             data = response.json()
-
-            results = data.get("abslist", [])
-            if not results:
+            music_data = data.get("data", {})
+            if not music_data:
                 logger.warning(f"未找到歌曲: {song_name}")
                 return "", ""
 
-            first_result = results[0]
-            music_rid = first_result.get("MUSICRID", "")
-            song_id = music_rid.replace("MUSIC_", "") if music_rid else ""
-            title = first_result.get("SONGNAME", song_name)
-            artist = first_result.get("ARTIST", "")
-            album = first_result.get("ALBUM", "")
+            # 提取歌曲信息
+            music_url = music_data.get("url", "")
+            name = music_data.get("name", song_name)
+            singer = music_data.get("songname", "")
+            album = music_data.get("album", "")
+            songtitle = music_data.get("songtitle", "")
+            lrc_url = music_data.get("lrc", "")
 
-            if not song_id:
-                logger.error("搜索结果中没有歌曲ID")
+            if not music_url:
+                logger.error("搜索结果中没有播放 URL")
                 return "", ""
 
-            display_name = title
-            if artist:
-                display_name = f"{title} - {artist}"
+            # 生成唯一 song_id（基于歌名+歌手的 hash）
+            song_id = f"wy_{abs(hash(f'{name}_{singer}'))}"
+
+            display_name = name
+            if singer:
+                display_name = f"{name} - {singer}"
                 if album:
                     display_name += f" ({album})"
 
             self.current_song = display_name
             self.song_id = song_id
 
-            duration_str = first_result.get("DURATION", "")
-            if duration_str:
-                try:
-                    self.total_duration = int(duration_str)
-                except (ValueError, TypeError):
-                    pass
+            logger.info(f"找到歌曲: {display_name}, URL 已获取")
 
-            quality = self.config["DEFAULT_BR"]
-            play_url = f"{self.config['URL_API']}/url/kw/{song_id}/{quality}"
+            # 获取歌词
+            await self._fetch_lyrics(lrc_url)
 
-            logger.info(f"找到歌曲: {display_name}, ID: {song_id}")
-
-            await self._fetch_lyrics(song_id)
-
-            return song_id, play_url
+            return song_id, music_url
 
         except Exception as e:
             logger.error(f"搜索歌曲失败: {e}", exc_info=True)
@@ -914,42 +897,8 @@ class MusicPlayer:
             return None
 
     async def _resolve_download_url(self, api_url: str) -> str | None:
-        """请求直链 API 解析实际音频下载地址."""
-        try:
-            headers = {
-                "X-Request-Key": self.config["URL_API_KEY"],
-                "User-Agent": "lx-music-request",
-            }
-
-            response = await asyncio.to_thread(
-                requests.get,
-                api_url,
-                headers=headers,
-                timeout=15,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            real_url = None
-            if isinstance(data, dict):
-                real_url = data.get("url")
-                if not real_url:
-                    inner = data.get("data")
-                    if isinstance(inner, dict):
-                        real_url = inner.get("url")
-                    elif isinstance(inner, str):
-                        real_url = inner
-
-            if not real_url:
-                logger.error(f"未能从直链 API 提取播放 URL: {data}")
-                return None
-
-            logger.info(f"解析到播放地址: {real_url[:80]}...")
-            return real_url
-
-        except Exception as e:
-            logger.error(f"解析播放 URL 失败: {e}")
-            return None
+        """网易云音乐 API 已直接返回音频 URL，无需额外解析."""
+        return api_url
 
     def _sync_download_file(
         self, download_url: str, headers: dict, temp_path: Path, cache_path: Path
@@ -998,61 +947,64 @@ class MusicPlayer:
                     logger.debug(f"清理临时文件失败: {e}")
             return None
 
-    async def _fetch_lyrics(self, song_id: str):
-        """获取歌词.
+    async def _fetch_lyrics(self, lrc_url: str):
+        """从网易云音乐 API 获取歌词（LRC 格式）.
 
         Args:
-            song_id: 歌曲 ID (酷我数字 ID)
+            lrc_url: 歌词 API URL（由搜索 API 返回）
         """
         try:
             self.lyrics = []
 
-            lyrics_url = self.config["LYRICS_URL"]
-            params = {"musicId": song_id}
+            if not lrc_url:
+                logger.info("未提供歌词 URL，跳过歌词获取")
+                return
 
-            logger.info(f"获取歌词: ID={song_id}")
+            logger.info(f"获取歌词: {lrc_url[:80]}...")
 
+            # 获取歌词 JSON
             response = await asyncio.to_thread(
                 requests.get,
-                lyrics_url,
-                params=params,
+                lrc_url,
                 headers=self.config["HEADERS"],
                 timeout=10,
             )
             response.raise_for_status()
 
             data = response.json()
-
-            if data.get("status") != 200:
+            lyric_text = data.get("data", {}).get("lyric", "")
+            if not lyric_text:
                 logger.info("该歌曲暂无歌词")
                 return
 
-            lrc_list = data.get("data", {}).get("lrclist", [])
-            if not lrc_list:
-                logger.warning("未获取到歌词数据")
-                return
+            # 解析 LRC 格式歌词 ([mm:ss.xx]歌词内容)
+            lrc_pattern = re.compile(r"\[(\d{2}):(\d{2})[\.:](\d{2,3})\]")
 
             filtered_count = 0
             _METADATA_PREFIXES = (
-                "作词",
-                "作曲",
-                "编曲",
-                "制作",
-                "演唱",
-                "原唱",
-                "翻唱",
+                "作词", "作曲", "编曲", "制作", "演唱", "原唱", "翻唱",
             )
 
-            for item in lrc_list:
-                time_str = item.get("time", "")
-                text = item.get("lineLyric", "").strip()
-
-                if not text or not time_str:
+            for line in lyric_text.split("\n"):
+                line = line.strip()
+                if not line:
                     continue
 
-                try:
-                    time_sec = float(time_str)
-                except (ValueError, TypeError):
+                match = lrc_pattern.search(line)
+                if not match:
+                    continue
+
+                minutes = int(match.group(1))
+                seconds = int(match.group(2))
+                frac = match.group(3)
+                # 毫秒部分：2 位 = 百分之一秒，3 位 = 千分之一秒
+                frac_sec = int(frac) / (100 if len(frac) == 2 else 1000)
+                time_sec = minutes * 60 + seconds + frac_sec
+
+                # 提取歌词文本（去掉时间标签）
+                text = lrc_pattern.sub("", line).strip()
+
+                if not text:
                     continue
 
                 if text.startswith(_METADATA_PREFIXES):
@@ -1060,6 +1012,9 @@ class MusicPlayer:
                     continue
 
                 self.lyrics.append((time_sec, text))
+
+            # 按时间排序
+            self.lyrics.sort(key=lambda x: x[0])
 
             if self.total_duration == 0 and self.lyrics:
                 last_time, _ = self.lyrics[-1]

@@ -206,58 +206,25 @@ class SettingsModel(BaseModel):
         str, _get_windowSizeMode, _set_windowSizeMode, notify=settingsChanged
     )
 
-    # 音乐配置
-    def _get_musicSearchUrl(self) -> str:
-        return self._get_value("MUSIC.SEARCH_URL", "")
+    # 音乐配置 (网易云音乐 API)
+    def _get_musicWyApiUrl(self) -> str:
+        return self._get_value("MUSIC.WYMUSIC_API_URL", "https://api.yaohud.cn/api/music/wy")
 
-    def _set_musicSearchUrl(self, value: str):
-        self._set_value("MUSIC.SEARCH_URL", value)
+    def _set_musicWyApiUrl(self, value: str):
+        self._set_value("MUSIC.WYMUSIC_API_URL", value)
 
-    musicSearchUrl = Property(
-        str, _get_musicSearchUrl, _set_musicSearchUrl, notify=settingsChanged
+    musicWyApiUrl = Property(
+        str, _get_musicWyApiUrl, _set_musicWyApiUrl, notify=settingsChanged
     )
 
-    def _get_musicUrlApi(self) -> str:
-        return self._get_value("MUSIC.URL_API", "")
+    def _get_musicWyApiKey(self) -> str:
+        return self._get_value("MUSIC.WYMUSIC_API_KEY", "")
 
-    def _set_musicUrlApi(self, value: str):
-        self._set_value("MUSIC.URL_API", value)
+    def _set_musicWyApiKey(self, value: str):
+        self._set_value("MUSIC.WYMUSIC_API_KEY", value)
 
-    musicUrlApi = Property(
-        str, _get_musicUrlApi, _set_musicUrlApi, notify=settingsChanged
-    )
-
-    def _get_musicUrlApiKey(self) -> str:
-        return self._get_value("MUSIC.URL_API_KEY", "")
-
-    def _set_musicUrlApiKey(self, value: str):
-        self._set_value("MUSIC.URL_API_KEY", value)
-
-    musicUrlApiKey = Property(
-        str, _get_musicUrlApiKey, _set_musicUrlApiKey, notify=settingsChanged
-    )
-
-    def _get_musicDefaultPlatform(self) -> str:
-        return self._get_value("MUSIC.DEFAULT_PLATFORM", "kw")
-
-    def _set_musicDefaultPlatform(self, value: str):
-        self._set_value("MUSIC.DEFAULT_PLATFORM", value)
-
-    musicDefaultPlatform = Property(
-        str,
-        _get_musicDefaultPlatform,
-        _set_musicDefaultPlatform,
-        notify=settingsChanged,
-    )
-
-    def _get_musicDefaultQuality(self) -> str:
-        return self._get_value("MUSIC.DEFAULT_QUALITY", "320k")
-
-    def _set_musicDefaultQuality(self, value: str):
-        self._set_value("MUSIC.DEFAULT_QUALITY", value)
-
-    musicDefaultQuality = Property(
-        str, _get_musicDefaultQuality, _set_musicDefaultQuality, notify=settingsChanged
+    musicWyApiKey = Property(
+        str, _get_musicWyApiKey, _set_musicWyApiKey, notify=settingsChanged
     )
 
     # MQTT 配置
