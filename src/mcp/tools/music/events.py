@@ -17,6 +17,7 @@ class MusicStateData:
         position: 当前播放位置（秒）
         duration: 总时长（秒）
         pause_source: 暂停来源 ("tts", "manual", "external", None)
+        cover_url: 专辑封面图的本地文件 URL（file:// 格式），None 表示无封面
     """
 
     state: str
@@ -24,6 +25,7 @@ class MusicStateData:
     position: float
     duration: float
     pause_source: Optional[str] = None
+    cover_url: Optional[str] = None
 
 
 @dataclass

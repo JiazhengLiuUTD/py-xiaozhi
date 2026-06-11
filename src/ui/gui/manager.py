@@ -46,6 +46,10 @@ class ViewManager(QObject):
         # 激活服务引用
         self._activation_service = None
 
+        # 音乐封面相关
+        self._showing_music_cover = False
+        self._saved_emotion_url = ""
+
         # 设置激活码获取器
         self._bridge.set_activation_code_getter(self._get_activation_code)
 
@@ -59,6 +63,7 @@ class ViewManager(QObject):
         self._event_bus.on(Events.UI_UPDATE_STATUS, self._on_update_status)
         self._event_bus.on(Events.UI_TOGGLE_WINDOW, self._on_toggle_window)
         self._event_bus.on(Events.UI_TOGGLE_MODE, self._on_toggle_mode)
+        self._event_bus.on(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
         logger.debug("ViewManager: 已订阅 UI 事件")
 
     def _on_config_saved(self):
@@ -75,7 +80,13 @@ class ViewManager(QObject):
         """处理表情更新."""
         emotion = data.emotion if hasattr(data, "emotion") else str(data)
         url = self._emotion_service.get_emotion_url(emotion)
-        self._main_model.set_emotion_url(url)
+
+        if self._showing_music_cover:
+            # 正在显示封面时，仅保存表情 URL，不覆盖封面显示
+            self._saved_emotion_url = url
+            logger.debug(f"音乐封面显示中，暂存表情 URL: {emotion}")
+        else:
+            self._main_model.set_emotion_url(url)
 
     async def _on_update_status(self, data):
         """处理状态更新."""
@@ -93,6 +104,33 @@ class ViewManager(QObject):
         """处理模式切换事件."""
         logger.debug("ViewManager: 收到模式切换事件")
         self.toggle_mode()
+
+    async def _on_music_state_changed(self, data):
+        """处理音乐播放状态变化事件.
+
+        播放音乐时用专辑封面替换表情，停止/完成时恢复原表情。
+        """
+        from src.mcp.tools.music.events import MusicStateData
+
+        if not isinstance(data, MusicStateData):
+            return
+
+        state = data.state
+        cover_url = data.cover_url
+
+        if state == "playing" and cover_url:
+            # 保存当前表情 URL，然后显示封面
+            self._saved_emotion_url = self._main_model.emotionUrl
+            self._main_model.set_emotion_url(cover_url)
+            self._showing_music_cover = True
+            logger.info(f"显示专辑封面: {cover_url}")
+        elif state in ("stopped", "completed") and self._showing_music_cover:
+            # 恢复之前保存的表情
+            restore_url = self._saved_emotion_url or self._emotion_service.get_emotion_url("neutral")
+            self._main_model.set_emotion_url(restore_url)
+            self._showing_music_cover = False
+            self._saved_emotion_url = ""
+            logger.info("音乐结束，恢复原表情")
 
     async def start(self, mode: str = "gui"):
         """启动视图.

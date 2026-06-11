@@ -130,6 +130,10 @@ class MusicPlayer:
 
         self._clean_temp_cache()
 
+        self._cover_dir = self.cache_dir / "covers"
+        self._cover_dir.mkdir(parents=True, exist_ok=True)
+        self._current_cover_path: Path | None = None
+
         self._local_playlist: list[MusicMetadata] | None = None
         self._last_scan_time = 0
 
@@ -390,6 +394,7 @@ class MusicPlayer:
             self.total_duration = metadata.duration or 0
             self.current_url = str(file_path)
             self.lyrics = []
+            self._current_cover_path = None
 
             # 使用 ffprobe 验证音频文件有效性并获取时长
             duration = await MusicDecoder.get_duration(file_path)
@@ -737,6 +742,7 @@ class MusicPlayer:
             album = music_data.get("album", "")
             songtitle = music_data.get("songtitle", "")
             lrc_url = music_data.get("lrc", "")
+            picture_url = music_data.get("picture", "")
 
             if not music_url:
                 logger.error("搜索结果中没有播放 URL")
@@ -755,6 +761,12 @@ class MusicPlayer:
             self.song_id = song_id
 
             logger.info(f"找到歌曲: {display_name}, URL 已获取")
+
+            # 下载并缓存专辑封面
+            if picture_url:
+                await self._download_cover(picture_url, song_id)
+            else:
+                self._current_cover_path = None
 
             # 获取歌词
             await self._fetch_lyrics(lrc_url)
@@ -965,6 +977,59 @@ class MusicPlayer:
                     logger.debug(f"清理临时文件失败: {e}")
             return None
 
+    async def _download_cover(self, picture_url: str, song_id: str):
+        """下载并缓存专辑封面图片.
+
+        Args:
+            picture_url: 封面图片 URL
+            song_id: 歌曲 ID（用于缓存文件名）
+        """
+        try:
+            # 尝试多种扩展名查找已有缓存
+            for ext in (".jpg", ".png", ".webp"):
+                cached = self._cover_dir / f"{song_id}{ext}"
+                if cached.exists():
+                    self._current_cover_path = cached
+                    logger.info(f"使用缓存的封面图: {cached.name}")
+                    return
+
+            # 下载封面
+            cover_ext = ".jpg"
+            # 从 URL 推断扩展名
+            url_lower = picture_url.lower()
+            for ext in (".png", ".webp", ".jpeg"):
+                if ext in url_lower:
+                    cover_ext = ext if ext != ".jpeg" else ".jpg"
+                    break
+
+            temp_path = self.temp_cache_dir / f"temp_cover_{int(time.time())}_{song_id}{cover_ext}"
+            cache_path = self._cover_dir / f"{song_id}{cover_ext}"
+
+            response = await asyncio.to_thread(
+                requests.get,
+                picture_url,
+                headers=self.config["HEADERS"],
+                timeout=10,
+            )
+            response.raise_for_status()
+
+            # 写入临时文件再移入缓存（原子操作）
+            def _save_cover():
+                with open(temp_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                shutil.move(str(temp_path), str(cache_path))
+                return cache_path
+
+            result = await asyncio.to_thread(_save_cover)
+            self._current_cover_path = result
+            logger.info(f"封面图下载完成并缓存: {result.name}")
+
+        except Exception as e:
+            logger.warning(f"下载封面图失败: {e}")
+            self._current_cover_path = None
+
     async def _fetch_lyrics(self, lrc_url: str):
         """从网易云音乐 API 获取歌词（LRC 格式）.
 
@@ -1145,15 +1210,26 @@ class MusicPlayer:
 
             from .events import MusicStateData
 
+            # 构建封面 URL
+            cover_url = None
+            if state == "playing" and self._current_cover_path and self._current_cover_path.exists():
+                try:
+                    from PySide6.QtCore import QUrl
+                    cover_url = QUrl.fromLocalFile(str(self._current_cover_path)).toString()
+                except ImportError:
+                    # 无 GUI 环境，使用简单 file:// URL
+                    cover_url = f"file:///{self._current_cover_path}".replace("\\", "/")
+
             data = MusicStateData(
                 state=state,
                 song=song_name or self.current_song,
                 position=position if position is not None else self.current_position,
                 duration=self.total_duration,
                 pause_source=self._pause_source if state == "paused" else None,
+                cover_url=cover_url,
             )
             await self._event_bus.emit(Events.MUSIC_STATE_CHANGED, data)
-            logger.debug(f"发送音乐状态变化事件: {state}")
+            logger.debug(f"发送音乐状态变化事件: {state}, 封面: {cover_url is not None}")
         except Exception as e:
             logger.debug(f"发送状态事件失败: {e}")
 
