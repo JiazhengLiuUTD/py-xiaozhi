@@ -29,8 +29,12 @@ async def _call_player(method_name: str, args: Dict[str, Any]) -> Dict[str, Any]
         "搜索并播放指定的歌曲。根据歌名在线搜索歌曲并自动开始播放。"
         "如果已有音乐在播放，会自动停止当前音乐并播放新歌曲。"
         "用于播放用户请求的特定歌曲，例如'播放周杰伦的稻香'、'听一下孤勇者'。"
+        "n 参数用于选择搜索结果中第 n 首歌曲（从 1 开始），默认为 1。"
     ),
-    props=[Prop("song_name", PropType.STR)],
+    props=[
+        Prop("song_name", PropType.STR),
+        Prop("n", PropType.INT, default=1, min_val=1),
+    ],
 )
 async def tool_music_search(args):
     result = await _call_player("search_and_play", args)

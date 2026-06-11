@@ -152,7 +152,6 @@ class MusicPlayer:
                 or cm.get_config("MUSIC.WYMUSIC_API_URL", "https://api.yaohud.cn/api/music/wy"),
             "WYMUSIC_API_KEY": os.environ.get("WYMusic_API_KEY")
                 or cm.get_config("MUSIC.WYMUSIC_API_KEY", ""),
-            "SEARCH_LIMIT": 2,
             "HEADERS": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "application/json, text/plain, */*",
@@ -223,6 +222,15 @@ class MusicPlayer:
             logger.info("临时音乐缓存清理完成")
         except Exception as e:
             logger.error(f"清理临时缓存目录失败: {e}")
+
+    async def _remove_cache_file(self, file_path: Path) -> None:
+        """删除无效的缓存文件"""
+        try:
+            if file_path.exists():
+                file_path.unlink()
+                logger.info(f"已删除无效缓存文件: {file_path.name}")
+        except Exception as e:
+            logger.warning(f"删除无效缓存文件失败: {file_path.name}, {e}")
 
     def _scan_local_music(self, force_refresh: bool = False) -> list[MusicMetadata]:
         """扫描本地音乐缓存"""
@@ -383,13 +391,15 @@ class MusicPlayer:
             self.current_url = str(file_path)
             self.lyrics = []
 
-            # 总是使用 ffprobe 获取准确的音频时长
+            # 使用 ffprobe 验证音频文件有效性并获取时长
             duration = await MusicDecoder.get_duration(file_path)
             if duration > 0:
                 self.total_duration = duration
                 logger.info(f"从音频文件获取准确时长: {duration:.2f}秒")
-            elif self.total_duration == 0:
-                logger.warning("无法获取音频时长")
+            else:
+                logger.error(f"音频文件无效或已损坏，无法获取时长: {file_path.name}")
+                await self._remove_cache_file(file_path)
+                return {"status": "error", "message": f"音频文件无效或已损坏: {file_id}"}
 
             success = await self._start_playback(file_path)
 
@@ -409,10 +419,15 @@ class MusicPlayer:
             logger.error(f"播放本地音乐失败: {e}")
             return {"status": "error", "message": f"播放失败: {str(e)}"}
 
-    async def search_and_play(self, song_name: str) -> dict:
-        """搜索并播放歌曲"""
+    async def search_and_play(self, song_name: str, n: int = 1) -> dict:
+        """搜索并播放歌曲
+
+        Args:
+            song_name: 歌曲名称
+            n: 选择搜索结果中第 n 首歌曲（从 1 开始）
+        """
         try:
-            song_id, url = await self._search_song(song_name)
+            song_id, url = await self._search_song(song_name, n=n)
             if not song_id or not url:
                 return {"status": "error", "message": f"未找到歌曲: {song_name}"}
 
@@ -666,12 +681,13 @@ class MusicPlayer:
     # ==================== 内部方法 ====================
 
     async def _search_song(
-        self, song_name: str, source: str | None = None
+        self, song_name: str, n: int = 1, source: str | None = None
     ) -> tuple[str, str]:
         """通过网易云音乐 API 搜索歌曲获取 ID 和播放 URL.
 
         Args:
             song_name: 歌曲名称
+            n: 选择搜索结果中第 n 首歌曲（从 1 开始）
             source: 未使用（保留兼容）
 
         Returns:
@@ -680,12 +696,11 @@ class MusicPlayer:
         try:
             api_url = self.config["WYMUSIC_API_URL"]
             api_key = self.config["WYMUSIC_API_KEY"]
-            limit = self.config["SEARCH_LIMIT"]
 
             params = {
                 "key": api_key,
                 "msg": song_name.strip(),
-                "n": str(limit),
+                "n": str(n),
             }
 
             logger.info(f"网易云音乐搜索: {song_name}")
@@ -765,13 +780,16 @@ class MusicPlayer:
             if not file_path:
                 return False
 
-            # 总是使用 ffprobe 获取准确的音频时长（覆盖歌词推断的时长）
+            # 使用 ffprobe 验证音频文件有效性并获取时长
             duration = await MusicDecoder.get_duration(file_path)
             if duration > 0:
                 self.total_duration = duration
                 logger.info(f"从音频文件获取准确时长: {duration:.2f}秒")
-            elif self.total_duration == 0:
-                logger.warning("无法获取音频时长，将使用歌词时长或0")
+            else:
+                # 时长为 0 说明文件不是有效音频（ffprobe 返回 N/A 等），删除无效缓存
+                logger.error(f"音频文件无效或已损坏，无法获取时长: {file_path.name}")
+                await self._remove_cache_file(file_path)
+                return False
 
             return await self._start_playback(file_path)
 

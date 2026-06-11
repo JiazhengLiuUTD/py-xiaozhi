@@ -104,6 +104,14 @@
     ".agents/skills/trellis-meta/references/platform-files/overview.md": "6479cd2393166b4b369b511c44b78cbc64975c8b1df96ee1d4d1bd06b75cd48d",
     ".agents/skills/trellis-meta/references/platform-files/platform-map.md": "7dbf98be7d36b78c9a69d29283b57b559f7d9ca36206a2e3876849992faffaae",
     ".agents/skills/trellis-meta/references/platform-files/skills-and-commands.md": "f35ce6981f044e16b047a0ce1e8297f7d9d31ea83422dadebd9ad62c8de634e5",
-    ".agents/skills/trellis-update-spec/SKILL.md": "1001a178f92d606d850c5ba2891e0c417da50d3a6646f915fd51201abed8fcc6"
+    ".agents/skills/trellis-update-spec/SKILL.md": "1001a178f92d606d850c5ba2891e0c417da50d3a6646f915fd51201abed8fcc6",
+    ".trellis/scripts/common/__pycache__/active_task.cpython-311.pyc": "b35857124ab0e349b032904a81d21f2da40c6b4013be3d06b644dbea672a1d10",
+    ".trellis/scripts/common/__pycache__/developer.cpython-311.pyc": "6f9eeae692cd5620fce9b351c47d0ff990bf35d7eac2a65a9d55eaf352d07071",
+    ".trellis/scripts/common/__pycache__/paths.cpython-311.pyc": "58ccad771eb3b5cdbe6595fef4ba4c1454c856d976874967a6051382539bb53f",
+    ".trellis/scripts/common/__pycache__/__init__.cpython-311.pyc": "f1716df62b1f749fb5d8e861bfad2f46bb69f7be7eee0f9bac96dd643862d3a4",
+    ".trellis/scripts/common/__pycache__/active_task.cpython-310.pyc": "b930509a05a2c94b453ed00f26b8515cbf174965b324ab82410147676b359de5",
+    ".trellis/scripts/common/__pycache__/developer.cpython-310.pyc": "d4b3af3e8f346da12ffd1409be62271f39a345da5c9ce8bd13d677566cad2070",
+    ".trellis/scripts/common/__pycache__/paths.cpython-310.pyc": "2730699caba33eb1266485351793ff6059c06360a7652e6b13c6ab29c5f76a96",
+    ".trellis/scripts/common/__pycache__/__init__.cpython-310.pyc": "471ec22ac103399e3434518606f913754e6714b0a68b06d0f1b85485be444c1f"
   }
 }
