@@ -50,6 +50,29 @@ class McpPlugin(Plugin):
         except Exception as e:
             logger.warning(f"设置 MusicPlayer EventBus 失败: {e}")
 
+        # 为 Camera 注入 EventBus（拍照后通知界面显示）
+        try:
+            from src.mcp.tools.camera import get_camera_instance
+
+            camera = get_camera_instance()
+            camera.set_event_bus(ctx.event_bus)
+            logger.info("Camera EventBus 已注入")
+
+            # 后台预热摄像头，避免首次拍照时 DirectShow 首次初始化耗时过长
+            camera.prewarm_async()
+        except Exception as e:
+            logger.warning(f"设置 Camera EventBus 失败: {e}")
+
+        # 为 QR Camera 注入 EventBus（二维码拍照后通知界面显示）
+        try:
+            from src.mcp.tools.qrcode import get_qr_camera_instance
+
+            qr_camera = get_qr_camera_instance()
+            qr_camera.set_event_bus(ctx.event_bus)
+            logger.info("QRCamera EventBus 已注入")
+        except Exception as e:
+            logger.warning(f"设置 QRCamera EventBus 失败: {e}")
+
     async def on_incoming_json(self, message) -> None:
         if not isinstance(message, dict):
             return
@@ -80,5 +103,13 @@ class McpPlugin(Plugin):
                     self._server.set_send_callback(None)
             except Exception as e:
                 logger.debug(f"MCP shutdown 清理失败: {e}")
+
+            # 释放长连接的摄像头资源
+            try:
+                from src.mcp.tools.camera import get_camera_instance
+
+                get_camera_instance().close()
+            except Exception as e:
+                logger.debug(f"关闭摄像头失败: {e}")
 
         pool.register("mcp.server", _mcp_cleanup)

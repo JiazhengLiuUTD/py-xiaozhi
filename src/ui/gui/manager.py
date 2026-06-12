@@ -50,6 +50,10 @@ class ViewManager(QObject):
         self._showing_music_cover = False
         self._saved_emotion_url = ""
 
+        # 拍照照片相关
+        self._showing_photo = False
+        self._saved_emotion_url_for_photo = ""
+
         # 设置激活码获取器
         self._bridge.set_activation_code_getter(self._get_activation_code)
 
@@ -64,6 +68,7 @@ class ViewManager(QObject):
         self._event_bus.on(Events.UI_TOGGLE_WINDOW, self._on_toggle_window)
         self._event_bus.on(Events.UI_TOGGLE_MODE, self._on_toggle_mode)
         self._event_bus.on(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
+        self._event_bus.on(Events.PHOTO_CAPTURED, self._on_photo_captured)
         logger.debug("ViewManager: 已订阅 UI 事件")
 
     def _on_config_saved(self):
@@ -81,7 +86,11 @@ class ViewManager(QObject):
         emotion = data.emotion if hasattr(data, "emotion") else str(data)
         url = self._emotion_service.get_emotion_url(emotion)
 
-        if self._showing_music_cover:
+        if self._showing_photo:
+            # 照片显示中，暂存表情 URL，不覆盖照片
+            self._saved_emotion_url_for_photo = url
+            logger.debug(f"照片显示中，暂存表情 URL: {emotion}")
+        elif self._showing_music_cover:
             # 正在显示封面时，仅保存表情 URL，不覆盖封面显示
             self._saved_emotion_url = url
             logger.debug(f"音乐封面显示中，暂存表情 URL: {emotion}")
@@ -109,6 +118,7 @@ class ViewManager(QObject):
         """处理音乐播放状态变化事件.
 
         播放音乐时用专辑封面替换表情，停止/完成时恢复原表情。
+        照片显示优先级高于音乐封面。
         """
         from src.mcp.tools.music.events import MusicStateData
 
@@ -119,18 +129,61 @@ class ViewManager(QObject):
         cover_url = data.cover_url
 
         if state == "playing" and cover_url:
-            # 保存当前表情 URL，然后显示封面
-            self._saved_emotion_url = self._main_model.emotionUrl
-            self._main_model.set_emotion_url(cover_url)
-            self._showing_music_cover = True
-            logger.info(f"显示专辑封面: {cover_url}")
+            if self._showing_photo:
+                # 照片显示中，仅保存封面信息，不覆盖照片
+                logger.debug(f"照片显示中，暂存音乐封面 URL")
+            else:
+                # 保存当前表情 URL，然后显示封面
+                self._saved_emotion_url = self._main_model.emotionUrl
+                self._main_model.set_emotion_url(cover_url)
+                self._showing_music_cover = True
+                logger.info(f"显示专辑封面: {cover_url}")
         elif state in ("stopped", "completed") and self._showing_music_cover:
-            # 恢复之前保存的表情
-            restore_url = self._saved_emotion_url or self._emotion_service.get_emotion_url("neutral")
-            self._main_model.set_emotion_url(restore_url)
-            self._showing_music_cover = False
-            self._saved_emotion_url = ""
-            logger.info("音乐结束，恢复原表情")
+            if self._showing_photo:
+                # 照片显示中，不恢复封面相关的表情
+                logger.debug("照片显示中，跳过音乐封面恢复")
+            else:
+                # 恢复之前保存的表情
+                restore_url = self._saved_emotion_url or self._emotion_service.get_emotion_url("neutral")
+                self._main_model.set_emotion_url(restore_url)
+                self._showing_music_cover = False
+                self._saved_emotion_url = ""
+                logger.info("音乐结束，恢复原表情")
+
+    async def _on_photo_captured(self, data):
+        """处理拍照完成事件.
+
+        拍照后用照片替换表情，直到小智再次发言时恢复。
+        """
+        from src.mcp.tools.camera.events import PhotoCaptureData
+
+        if not isinstance(data, PhotoCaptureData):
+            return
+
+        photo_url = data.photo_url
+        if not photo_url:
+            return
+
+        # 保存当前表情 URL（可能是普通表情或音乐封面）
+        self._saved_emotion_url_for_photo = self._main_model.emotionUrl
+        self._main_model.set_emotion_url(photo_url)
+        self._showing_photo = True
+        logger.info(f"显示拍照照片: {photo_url}")
+
+    def clear_photo(self):
+        """清除照片显示，恢复之前的表情.
+
+        由 UIPlugin 在 TTS 开始时调用。
+        """
+        if not self._showing_photo:
+            return
+
+        # 恢复之前保存的表情 URL
+        restore_url = self._saved_emotion_url_for_photo or self._emotion_service.get_emotion_url("neutral")
+        self._main_model.set_emotion_url(restore_url)
+        self._showing_photo = False
+        self._saved_emotion_url_for_photo = ""
+        logger.info("拍照照片已清除，恢复原表情")
 
     async def start(self, mode: str = "gui"):
         """启动视图.

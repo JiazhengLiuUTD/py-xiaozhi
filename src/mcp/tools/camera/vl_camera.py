@@ -35,7 +35,7 @@ class VLCamera(BaseCamera):
                 "CAMERA.Local_VL_url",
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",
             ),
-            timeout=httpx.Timeout(30.0, connect=10.0),
+            timeout=httpx.Timeout(30.0, connect=15.0),
         )
         self.model = config.get_config("CAMERA.models", "glm-4v-plus")
         logger.info(f"VL Camera initialized with model: {self.model}")

@@ -64,6 +64,9 @@ class Events:
     UI_TOGGLE_MODE = "ui_toggle_mode"  # 切换对话模式
     UI_TOGGLE_WINDOW = "ui_toggle_window"  # 切换窗口可见性
 
+    # 拍照事件
+    PHOTO_CAPTURED = "photo_captured"  # 拍照完成，显示照片
+
     # 配置变更事件
     CONFIG_CHANGED = "config_changed"  # 配置已变更（需要热重载）
 

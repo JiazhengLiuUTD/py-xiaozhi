@@ -101,6 +101,9 @@ class UIPlugin(Plugin):
                         self.view_manager.main_model.set_tts_text(text)
                     else:
                         self.view_manager.set_tts_text(text)
+            # TTS 开始时，清除拍照照片显示（恢复表情）
+            if msg_type == "tts" and self._is_gui and self.view_manager:
+                self.view_manager.clear_photo()
         elif msg_type == "llm":
             if emotion := message.get("emotion"):
                 if self.view_manager:
